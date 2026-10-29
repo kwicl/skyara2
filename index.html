@@ -311,7 +311,7 @@ function renderAside(){
   h+='<p class="hint">'+(S.cfg===1?"Une façade avec cour intérieure d'aération.":(S.cfg===2?"Deux façades, sans cour. Aération directe.":"Trois façades, sans cour. Hypothèse à ajuster dans l'onglet Surfaces."))+'</p></fieldset>';
   var gm=compute(S,S.cfg),gg=S.geo[S.cfg];
   h+='<fieldset><legend>Métrés du lot ('+S.cfg+' façade'+(S.cfg>1?'s':'')+')</legend>';
-  [["cour","Cour intérieure"],["murs","Emprise des murs"],["enc","Encorbellement par défaut"],["cage","Cage d\'escalier / niveau"],["esc","Marbre d\'escalier / niveau"],["ter","Supplément terrasse"]].forEach(function(r){
+  [["cour","Cour intérieure"],["murs","Emprise des murs"],["cage","Cage d\'escalier / niveau"],["esc","Marbre d\'escalier / niveau"],["ter","Supplément terrasse"]].forEach(function(r){
     h+=S.edit?field("a_"+r[0],r[1],"geo."+S.cfg+"."+r[0],gg[r[0]],"m²")
       :'<div class="field"><span style="font-size:13.5px">'+r[1]+'</span><span style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">'+f2(gg[r[0]])+' m²</span></div>';
   });
@@ -320,7 +320,6 @@ function renderAside(){
     h+=S.edit?field("a_enc"+li,"Encorbellement, "+lvl(li),"encL."+S.cfg+"_"+li,ev,"m²")
       :'<div class="field"><span style="font-size:13.5px">Encorbellement, '+lvl(li)+'</span><span style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">'+f2(ev)+' m²</span></div>';
   }
-  if(S.edit&&S.nEt>0)h+='<button type="button" class="btn" data-act="encAll">Même valeur sur tous les étages</button>';
   h+='<p class="hint">Habitable : RDC <b>'+f2(gm.rdc)+'</b> m²'+(S.nEt?', étages <b>'+gm.hab.slice(1).map(f2).join(' / ')+'</b> m²':'')+'. Vendable : <b>'+f2(gm.comm)+'</b> m².</p>'
    +'<button type="button" class="btn'+(S.edit?' primary':'')+'" data-act="edit" aria-pressed="'+(!!S.edit)+'">'+(S.edit?'Modification activée':'Modifier les métrés')+'</button></fieldset>';
   h+='<fieldset><legend>Nombre d\'étages (hors RDC)</legend>'+seg("net",S.nEt,[[0,"0"],[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"]])
@@ -399,7 +398,7 @@ function paneRent(m){
 
   h+='<details class="notes"><summary>Hypothèses à vérifier</summary><ul>'
    +'<li>Pierres de fondation (Hajar) : les 3 000 DH sont lus comme deux lots forfaitaires, 30 m³ à 2 000 DH et 6 m³ à 1 000 DH. Au prix par m³, la ligne coûterait 66 000 DH.</li>'
-   +'<li>3 façades : la fiche ne donne pas de règle. Cour 0 m², murs 10 m², encorbellement 8 m² par étage. À ajuster dans Surfaces, bouton « Modifier les métrés ».</li>'
+   +'<li>3 façades : la fiche ne donne pas de règle. Cour 0 m², murs 10 m², encorbellement de départ 8 m² par étage. À saisir étage par étage dans « Métrés du lot », bouton « Modifier les métrés ».</li>'
    +'<li>Fer à béton : 2 quintaux de rond et 10 quintaux de H.A. pour chacun des '+(S.nEt+1)+' niveaux (RDC compris), sans fer séparé pour fondations et terrasse.</li>'
    +'<li>Surface de terrasse : surface d\'un étage + 20 m² (escalier, acrotère). Elle donne 110 m² pour un lot de 100 m² à 1 façade.</li>'
    +'<li>Sol argileux : surcoût de '+S.argPct+' % sur le sous-total des fondations pour le double chaînage. Valeur proposée, non issue de la fiche.</li>'
@@ -421,7 +420,7 @@ function paneSurf(m){
    +'<tr><td>RDC</td><td>'+f2(S.S)+' − '+f2(g.cour)+' − '+f2(g.murs)+'</td><td>0</td><td>'+f2(m.rdc)+' m²</td><td>− '+f2(g.cage)+'</td><td>'+f2(m.rdc-g.cage)+' m²</td></tr>'
    +m.hab.slice(1).map(function(x,i){return '<tr><td>'+lvl(i+1)+'</td><td>'+f2(m.rdc)+'</td><td>+ '+f2(m.encs[i+1])+'</td><td>'+f2(x)+' m²</td><td>− '+f2(g.cage)+'</td><td>'+f2(x-g.cage)+' m²</td></tr>';}).join("")
    +'<tr class="sum"><td>Total</td><td></td><td></td><td></td><td></td><td>'+f2(m.comm)+' m²</td></tr></tbody></table></div>';
-  var rows=[["cour","Cour intérieure (aération)"],["murs","Emprise des murs"],["enc","Encorbellement par défaut, par étage (balcons vendus)"],["cage","Cage d'escalier au sol, par niveau (déduite de la surface vendable)"],["esc","Escalier : marbre et cadres, par niveau"],["ter","Terrasse : supplément sur la surface d'étage (cage d'escalier, acrotère)"]];
+  var rows=[["cour","Cour intérieure (aération)"],["murs","Emprise des murs"],["cage","Cage d'escalier au sol, par niveau (déduite de la surface vendable)"],["esc","Escalier : marbre et cadres, par niveau"],["ter","Terrasse : supplément sur la surface d'étage (cage d'escalier, acrotère)"]];
   var ms=[1,2,3].map(function(x){return compute(S,x);});
   h+='<div><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px"><h2 style="margin:0">Métrés par élément</h2><div style="display:flex;gap:8px;flex-wrap:wrap">'
    +'<button type="button" class="btn'+(S.edit?' primary':'')+'" data-act="edit" aria-pressed="'+(!!S.edit)+'">'+(S.edit?'Modification activée':'Modifier les métrés')+'</button>'

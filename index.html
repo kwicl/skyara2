@@ -172,6 +172,8 @@ tr.hl td,tr.hl th{background:var(--accent-soft)}
 </div>
 <div id="toast" role="status"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -337,6 +339,7 @@ function renderAside(){
   h+=field("i_arg","Surcoût sol argileux","argPct",S.argPct,"% fond.");
   h+='<label class="check"><input type="checkbox" id="i_scale" data-chk="scale"'+(S.scale?' checked':'')+'><span>Adapter les quantités à la surface du terrain (base de référence : 100 m²)</span></label>';
   h+='</div></details>';
+  h+='<button type="button" class="btn primary" data-act="pdf" style="width:100%;padding:11px 12px">Exporter en PDF</button>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" data-act="copy">Copier le résumé</button><button type="button" class="btn" data-act="reset">Tout réinitialiser</button></div>';
   document.getElementById("aside").innerHTML=h;
 }
@@ -495,7 +498,7 @@ function paneFees(m){
 
 /* ---------- Onglet Annexe : méthode de calcul ---------- */
 function norm(s){return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");}
-function paneAnnex(m){
+function paneAnnex(m,rawOnly){
   var F=S.fees,g=m.g,A=S.S,pT=A*S.pT;
   function L(id){var l=m.lines.filter(function(x){return x.id===id;})[0];return l?f2(l.q)+" "+l.unit+" × "+f2(l.p)+" DH = "+dh(l.t):"Non applicable";}
   var sc={bas:"Bas",moy:"Médian",haut:"Haut"}[S.scen];
@@ -540,6 +543,7 @@ function paneAnnex(m){
    ["Bilan commercial","Part d'un poste dans le coût","Montant du poste ÷ coût de revient total × 100.","Gros œuvre : "+f1(m.go/m.cost*100)+" %","Tableau de l'onglet Rentabilité."],
    ["Bilan commercial","Comparaison 1, 2, 3 façades","Mêmes prix, mêmes frais, mêmes étages. Seuls changent la cour, les murs et l'encorbellement de chaque configuration.","Voir l'onglet Rentabilité",""]
   ];
+  if(rawOnly)return E;
   var terms=norm(S.q||"").split(/\s+/).filter(Boolean);
   var shown=E.filter(function(e){var t=norm(e.join(" "));return terms.every(function(w){return t.indexOf(w)>=0;});});
   var h='<section class="pane" id="p-annexe"><div><h2>Annexe : méthode de calcul</h2><p class="hint" style="margin-bottom:10px">Chaque indicateur avec sa formule et sa valeur actuelle. Les valeurs suivent vos saisies.</p>'
@@ -555,6 +559,196 @@ function paneAnnex(m){
     h+='</div>';
   });
   return h+'</section>';
+}
+
+/* ---------- Export PDF ---------- */
+function P(s){return String(s).replace(/[   ]/g," ").replace(/−/g,"-").replace(/[‘’]/g,"'").replace(/≤/g,"<=").replace(/≥/g,">=").replace(/²/g,"2").replace(/³/g,"3").replace(/œ/g,"oe").replace(/Œ/g,"OE");}
+function pdfSave(doc){
+  var name="Skyimmo-"+new Date().toISOString().slice(0,10)+".pdf";
+  var blob=doc.output("blob");
+  function fallback(){
+    var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
+    toast("PDF généré");
+  }
+  if(window.claude&&window.claude.use){
+    window.claude.use("downloads").then(function(d){
+      if(!d){fallback();return;}
+      d.save({filename:name,data:blob}).then(function(){toast("PDF enregistré");},function(e){if(e&&e.code==="declined")return;toast("Enregistrement impossible");});
+    },fallback);
+  }else fallback();
+}
+function buildPdf(){
+  var J=window.jspdf;
+  if(!J||!J.jsPDF){toast("Bibliothèque PDF non chargée. Vérifiez la connexion.");return;}
+  var doc=new J.jsPDF({unit:"mm",format:"a4"});
+  if(typeof doc.autoTable!=="function"){toast("Module de tableaux PDF non chargé.");return;}
+  var m=compute(S,S.cfg),g=m.g,F=S.fees,M=14,y=0;
+  var INK=[21,32,42],BLUE=[42,63,209],SOFT=[233,236,238],GAIN=[12,118,83],LOSS=[176,47,28];
+  function money(n){return f0(n)+" DH";}
+  function sg(n){return (n>=0?"+ ":"- ")+f0(Math.abs(n))+" DH";}
+  function newPage(){doc.addPage();y=20;}
+  function title(t){
+    if(y>250)newPage();
+    doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(INK[0],INK[1],INK[2]);doc.text(P(t),M,y);
+    y+=2.5;doc.setDrawColor(BLUE[0],BLUE[1],BLUE[2]);doc.setLineWidth(0.6);doc.line(M,y,M+24,y);y+=5;
+  }
+  function note(t){
+    doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(70,82,94);
+    var ln=doc.splitTextToSize(P(t),182);
+    if(y+ln.length*4>282)newPage();
+    doc.text(ln,M,y);y+=ln.length*4+2;
+  }
+  function table(o){
+    doc.autoTable(Object.assign({startY:y,margin:{left:M,right:M,top:18,bottom:16},theme:"grid",
+      styles:{font:"helvetica",fontSize:8,cellPadding:1.6,lineColor:[205,211,216],lineWidth:0.1,textColor:INK,overflow:"linebreak",valign:"middle"},
+      headStyles:{fillColor:INK,textColor:255,fontStyle:"bold"},
+      alternateRowStyles:{fillColor:[246,247,248]},
+      didParseCell:function(d){d.cell.text=d.cell.text.map(P);}
+    },o));
+    y=doc.lastAutoTable.finalY+7;
+  }
+  var R={halign:"right"};
+  function grp(t,sub,span){return [{content:t,colSpan:span,styles:{fillColor:SOFT,fontStyle:"bold"}},{content:sub,styles:{fillColor:SOFT,fontStyle:"bold",halign:"right"}}];}
+
+  /* Page de garde et synthèse */
+  doc.setFillColor(INK[0],INK[1],INK[2]);doc.rect(0,0,210,34,"F");
+  doc.setFont("helvetica","bold");doc.setFontSize(24);doc.setTextColor(255,255,255);doc.text("Skyimmo",M,18);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(P("Rapport d'estimation : coût de revient et rentabilité"),M,26);
+  doc.setFontSize(9);doc.text(new Date().toLocaleDateString("fr-FR"),196,26,{align:"right"});
+  y=46;
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(70,82,94);
+  doc.text(m.marge>=0?"Gain potentiel":"Perte estimée",M,y);y+=9;
+  doc.setFont("helvetica","bold");doc.setFontSize(24);
+  var gc=m.marge>=0?GAIN:LOSS;doc.setTextColor(gc[0],gc[1],gc[2]);doc.text(P(sg(m.marge)),M,y);y+=7;
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(70,82,94);
+  doc.text(P(f2(m.comm)+" m2 vendables à "+f0(S.pv)+" DH/m2, lot de "+f0(S.S)+" m2, "+S.cfg+" façade"+(S.cfg>1?"s":"")+", R+"+S.nEt+"."),M,y);y+=8;
+  table({body:[
+    ["Coût de revient",money(m.cost),"Chiffre d'affaires",money(m.ca)],
+    ["Gain",sg(m.marge),"Rentabilité (ROI)",f1(m.roi)+" %"],
+    ["Marge au m2",money(m.mm2),"Prix d'équilibre",f0(m.eq)+" DH/m2"],
+    ["Surface vendable",f2(m.comm)+" m2","Prix de vente ciblé",f0(S.pv)+" DH/m2"]
+  ],columnStyles:{0:{fontStyle:"bold",fillColor:SOFT},1:R,2:{fontStyle:"bold",fillColor:SOFT},3:R},alternateRowStyles:{}});
+
+  title("Paramètres saisis");
+  var encTxt=[];for(var e=1;e<=S.nEt;e++)encTxt.push(lvl(e)+" : "+f2(m.encs[e])+" m2");
+  table({body:[
+    ["Configuration",S.cfg+" façade"+(S.cfg>1?"s":""),"Nombre d'étages",S.nEt+" (R+"+S.nEt+")"],
+    ["Appartements par étage",String(S.nApt),"Appartements au total",String((S.nEt+1)*S.nApt)],
+    ["Surface du terrain",f2(S.S)+" m2","Prix du terrain",f0(S.pT)+" DH/m2"],
+    ["Nature du sol",S.sol==="dur"?"Sol dur":"Sol argileux (+"+S.argPct+" % fondations)","Prix de vente ciblé",f0(S.pv)+" DH/m2"],
+    ["Scénario de prix",{bas:"Bas",moy:"Médian",haut:"Haut"}[S.scen],"Imprévus",S.imp+" %"],
+    ["Quantités adaptées à la surface",S.scale?"Oui (base 100 m2)":"Non","Cage d'escalier / niveau",f2(g.cage)+" m2"],
+    ["Cour intérieure",f2(g.cour)+" m2","Emprise des murs",f2(g.murs)+" m2"],
+    ["Marbre d'escalier / niveau",f2(g.esc)+" m2","Supplément terrasse",f2(g.ter)+" m2"],
+    ["Encorbellement par étage",{content:encTxt.length?encTxt.join(" ; "):"Aucun étage",colSpan:3}]
+  ],columnStyles:{0:{fontStyle:"bold",fillColor:SOFT},2:{fontStyle:"bold",fillColor:SOFT}},alternateRowStyles:{}});
+
+  /* 1. Rentabilité */
+  newPage();
+  title("1. Rentabilité");
+  var cats=[["Terrain acte en main",m.tAEM],["Honoraires, BET et taxes",m.honTax],["Gros oeuvre",m.go],["Finitions (second oeuvre)",m.so],["Raccordements et imprévus",m.racc+m.imp]];
+  table({head:[["Poste du coût de revient","Montant","Part","Par m2 vendable"]],
+    body:cats.map(function(c){return [c[0],money(c[1]),f1(c[1]/m.cost*100)+" %",f0(c[1]/m.comm)+" DH"];})
+      .concat([[{content:"Coût de revient total",styles:{fontStyle:"bold"}},{content:money(m.cost),styles:{fontStyle:"bold"}},"100 %",{content:f0(m.eq)+" DH",styles:{fontStyle:"bold"}}]]),
+    columnStyles:{1:R,2:R,3:R}});
+  doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(INK[0],INK[1],INK[2]);doc.text("Gain selon le prix de vente",M,y);y+=3;
+  table({head:[["Prix de vente","Chiffre d'affaires","Gain","ROI"]],
+    body:[-1000,-500,0,500,1000].map(function(d){var p=S.pv+d,ca=p*m.comm,mg=ca-m.cost;return [f0(p)+" DH/m2"+(d===0?" (votre prix)":""),money(ca),sg(mg),f1(mg/m.cost*100)+" %"];}),
+    columnStyles:{1:R,2:R,3:R}});
+  var ms=[1,2,3].map(function(c){return compute(S,c);});
+  doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(INK[0],INK[1],INK[2]);doc.text("Comparaison 1, 2 et 3 façades (mêmes prix, frais et étages)",M,y);y+=3;
+  table({head:[["","1 façade","2 façades","3 façades"]],body:[
+    ["Surface vendable"].concat(ms.map(function(x){return f2(x.comm)+" m2";})),
+    ["Coût de revient"].concat(ms.map(function(x){return money(x.cost);})),
+    ["Chiffre d'affaires"].concat(ms.map(function(x){return money(x.ca);})),
+    ["Gain"].concat(ms.map(function(x){return sg(x.marge);})),
+    ["ROI"].concat(ms.map(function(x){return f1(x.roi)+" %";})),
+    ["Prix d'équilibre"].concat(ms.map(function(x){return f0(x.eq)+" DH/m2";}))
+  ],columnStyles:{1:R,2:R,3:R}});
+
+  /* 2. Surfaces */
+  title("2. Surfaces");
+  table({head:[["Niveau","Base","Encorbellement","Surface habitable","Cage d'escalier","Surface vendable"]],
+    body:m.hab.map(function(x,i){return [lvl(i),i?f2(m.rdc):f2(S.S)+" - "+f2(g.cour)+" - "+f2(g.murs),i?"+ "+f2(m.encs[i]):"0",f2(x)+" m2","- "+f2(g.cage),f2(x-g.cage)+" m2"];})
+      .concat([[{content:"Total",colSpan:5,styles:{fontStyle:"bold"}},{content:f2(m.comm)+" m2",styles:{fontStyle:"bold"}}]]),
+    columnStyles:{1:R,2:R,3:R,4:R,5:R}});
+  note("Emprise de fondation (terrain - cour) : "+f2(m.emprise)+" m2. Surface de terrasse : "+f2(m.terr)+" m2 (dernier étage + "+f2(g.ter)+" m2). La cage d'escalier est déduite de la surface vendable mais reste comptée dans la surface construite.");
+  y+=3;
+
+  /* 3 et 4. Métré */
+  function linesBlock(sec,name,total){
+    newPage();title(name);
+    var ls=m.lines.filter(function(l){return l.sec===sec;}),groups=[],body=[],anyMod=false;
+    ls.forEach(function(l){if(groups.indexOf(l.grp)<0)groups.push(l.grp);});
+    groups.forEach(function(gr){
+      var items=ls.filter(function(l){return l.grp===gr;}),sub=0;items.forEach(function(l){sub+=l.t;});
+      body.push(grp(gr,money(sub),4));
+      items.forEach(function(l){
+        if(l.mq||l.mp)anyMod=true;
+        body.push([l.label,f2(l.q)+(l.mq?" *":""),l.unit,f2(l.p)+(l.mp?" *":""),f0(l.t)]);
+      });
+    });
+    body.push([{content:name+", total",colSpan:4,styles:{fontStyle:"bold",fillColor:SOFT}},{content:money(total),styles:{fontStyle:"bold",fillColor:SOFT,halign:"right"}}]);
+    table({head:[["Désignation","Quantité","Unité","Prix unitaire (DH)","Total (DH)"]],body:body,
+      columnStyles:{0:{cellWidth:78},1:R,2:{cellWidth:24},3:R,4:R},alternateRowStyles:{}});
+    if(anyMod)note("* valeur saisie manuellement, différente de la valeur calculée.");
+  }
+  linesBlock("go","3. Gros oeuvre",m.go);
+  linesBlock("so","4. Second oeuvre et finitions",m.so);
+
+  /* 5. Terrain et frais */
+  newPage();title("5. Terrain, frais et honoraires");
+  table({head:[["Poste","Base de calcul","Montant (DH)"]],body:[
+    grp("Acquisition du terrain acte en main",money(m.tAEM),2),
+    ["Prix d'achat du terrain",f2(S.S)+" m2 x "+f0(S.pT)+" DH",f0(m.pT)],
+    ["Droits d'enregistrement DGI",f2(F.dgi)+" % du prix",f0(m.dgi)],
+    ["Conservation foncière ANCFCC",f2(F.anc)+" % du prix + "+f0(F.ancFix)+" DH + "+f0(F.ancCert)+" DH",f0(m.anc)],
+    ["Honoraires du notaire","Le plus grand de "+f2(F.not)+" % du prix ou "+f0(F.notMin)+" DH",f0(m.not)],
+    ["TVA sur honoraires du notaire",f2(F.tva)+" % des honoraires",f0(m.tva)],
+    ["Débours et timbres notariaux","Forfait",f0(F.deb)],
+    grp("Honoraires, études et taxes",money(m.honTax),2),
+    ["Architecte (plans, suivi, autorisations)",f2(F.archi)+" % du gros oeuvre",f0(m.archi)],
+    ["Bureau d'études techniques (ingénieur béton)","Forfait",f0(F.bet)],
+    ["Taxe communale d'autorisation de bâtir","Forfait",f0(F.taxe)],
+    grp("Réseaux et imprévus",money(F.racc+m.imp),2),
+    ["Raccordements publics (eau et électricité)","Forfait",f0(F.racc)],
+    ["Imprévus",S.imp+" % du gros oeuvre et du second oeuvre",f0(m.imp)],
+    [{content:"Total terrain, frais, honoraires, réseaux et imprévus",colSpan:2,styles:{fontStyle:"bold",fillColor:SOFT}},{content:money(m.tAEM+m.honTax+F.racc+m.imp),styles:{fontStyle:"bold",fillColor:SOFT,halign:"right"}}]
+  ],columnStyles:{2:R},alternateRowStyles:{}});
+
+  /* 6. Hypothèses */
+  title("6. Hypothèses à vérifier");
+  [
+   "Pierres de fondation (Hajar) : les 3 000 DH de la fiche sont lus comme deux lots forfaitaires, 30 m3 à 2 000 DH et 6 m3 à 1 000 DH. Au prix par m3, la ligne coûterait 66 000 DH.",
+   "3 façades : la fiche ne donne pas de règle. Cour 0 m2, murs 10 m2, encorbellement de départ 8 m2 par étage.",
+   "Fer à béton : 2 quintaux de rond et 10 quintaux de H.A. pour chacun des "+(S.nEt+1)+" niveaux (RDC compris), sans fer séparé pour fondations et terrasse.",
+   "Surface de terrasse : surface du dernier étage + "+f2(g.ter)+" m2 (escalier, acrotère).",
+   "Sol argileux : surcoût de "+S.argPct+" % sur le sous-total des fondations pour le double chaînage. Valeur proposée, non issue de la fiche.",
+   "Main-d'oeuvre de fondation : surface au sol hors cour. Élévation et plâtre : surface habitable de chaque niveau.",
+   "Portes, porte blindée, sanitaires, placards et cuisines sont multipliés par le nombre d'appartements par étage ("+S.nApt+"). Aluminium et ferronnerie ne changent pas.",
+   "Imprévus : "+S.imp+" % par défaut. La formule de la fiche n'en prévoit pas. Le gain est avant impôts et frais de vente."
+  ].forEach(function(t){note("- "+t);});
+
+  /* 7. Annexe */
+  newPage();title("7. Annexe : méthode de calcul de chaque indicateur");
+  var E=paneAnnex(m,true),body=[],cur="";
+  E.forEach(function(r){
+    if(r[0]!==cur){cur=r[0];body.push([{content:cur,colSpan:4,styles:{fillColor:SOFT,fontStyle:"bold"}}]);}
+    body.push([{content:r[1],styles:{fontStyle:"bold"}},r[2],r[3],r[4]||""]);
+  });
+  table({head:[["Indicateur","Formule","Valeur actuelle","Note"]],body:body,
+    columnStyles:{0:{cellWidth:32},1:{cellWidth:56},2:{cellWidth:56},3:{cellWidth:38}},styles:{fontSize:7.2,cellPadding:1.4,font:"helvetica",lineColor:[205,211,216],lineWidth:0.1,textColor:INK,overflow:"linebreak"},alternateRowStyles:{}});
+
+  /* Pied de page */
+  var n=doc.getNumberOfPages(),today=new Date().toLocaleDateString("fr-FR");
+  for(var pgi=1;pgi<=n;pgi++){
+    doc.setPage(pgi);doc.setFont("helvetica","normal");doc.setFontSize(7.5);doc.setTextColor(120,130,140);
+    doc.text("Skyimmo, rapport du "+today,M,291);
+    doc.text("Page "+pgi+" / "+n,196,291,{align:"right"});
+  }
+  pdfSave(doc);
 }
 
 /* ---------- Rendu principal ---------- */
@@ -632,6 +826,10 @@ document.addEventListener("click",function(e){
   else if(a==="tab")S.tab=v;
   else if(a==="resetov")S.ov={};
   else if(a==="reset"){var tab=S.tab;S=clone(DEF);S.tab=tab;}
+  else if(a==="pdf"){
+    try{buildPdf();}catch(err){toast("Export PDF impossible : "+(err&&err.message?err.message:"erreur"));}
+    return;
+  }
   else if(a==="copy"){
     var txt=summary();
     try{navigator.clipboard.writeText(txt).then(function(){toast("Résumé copié");},function(){toast("Copie impossible sur cet écran");});}

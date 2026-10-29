@@ -179,7 +179,7 @@ var KEY="maroc-btp-immo-v1";
 var DEF={
   cfg:1,nEt:2,S:100,pT:3500,sol:"dur",pv:7000,scen:"haut",scale:true,imp:0,argPct:50,tab:"rent",
   edit:false,
-  geo:{1:{cour:10,murs:10,enc:10,esc:22,ter:20},2:{cour:0,murs:10,enc:5.6,esc:22,ter:20},3:{cour:0,murs:10,enc:8,esc:22,ter:20}},
+  geo:{1:{cour:10,murs:10,enc:10,cage:0,esc:22,ter:20},2:{cour:0,murs:10,enc:5.6,cage:0,esc:22,ter:20},3:{cour:0,murs:10,enc:8,cage:0,esc:22,ter:20}},
   fees:{dgi:4,anc:1.5,ancFix:150,ancCert:100,not:1,notMin:2500,tva:20,deb:2000,archi:3.5,bet:12000,taxe:7000,racc:15000},
   ov:{}
 };
@@ -218,7 +218,7 @@ function compute(st,cfg){
   var g=st.geo[cfg],A=st.S;
   var rdc=A-g.cour-g.murs,et=rdc+g.enc;
   var nL=1+st.nEt,hab=[],comm=0;
-  for(var u=0;u<nL;u++){hab.push(u?et:rdc);comm+=hab[u];}
+  for(var u=0;u<nL;u++){hab.push(u?et:rdc);comm+=hab[u]-g.cage;}
   var emprise=A-g.cour,terr=(nL>1?et:rdc)+g.ter;
   var k=st.scale?A/100:1;
   var lines=[];
@@ -311,7 +311,7 @@ function renderAside(){
   h+='<p class="hint">'+(S.cfg===1?"Une façade avec cour intérieure d'aération.":(S.cfg===2?"Deux façades, sans cour. Aération directe.":"Trois façades, sans cour. Hypothèse à ajuster dans l'onglet Surfaces."))+'</p></fieldset>';
   var gm=compute(S,S.cfg),gg=S.geo[S.cfg];
   h+='<fieldset><legend>Métrés du lot ('+S.cfg+' façade'+(S.cfg>1?'s':'')+')</legend>';
-  [["cour","Cour intérieure"],["murs","Emprise des murs"],["enc","Encorbellement / étage"],["esc","Marbre d\'escalier / niveau"],["ter","Supplément terrasse"]].forEach(function(r){
+  [["cour","Cour intérieure"],["murs","Emprise des murs"],["enc","Encorbellement / étage"],["cage","Cage d\'escalier / niveau"],["esc","Marbre d\'escalier / niveau"],["ter","Supplément terrasse"]].forEach(function(r){
     h+=S.edit?field("a_"+r[0],r[1],"geo."+S.cfg+"."+r[0],gg[r[0]],"m²")
       :'<div class="field"><span style="font-size:13.5px">'+r[1]+'</span><span style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">'+f2(gg[r[0]])+' m²</span></div>';
   });
@@ -406,14 +406,14 @@ function paneSurf(m){
   var h='<section class="pane" id="p-surf"><div><h2>Surfaces du lot en '+c+' façade'+(c>1?'s':'')+'</h2>'
    +'<div class="surf3"><div><b>'+f2(S.S)+' m²</b><span>Surface du terrain au sol</span></div>'
    +'<div><b>'+f2(m.comm)+' m²</b><span>Surface habitable nette, '+(S.nEt+1)+' niveau'+(S.nEt?'x':'')+'</span></div>'
-   +'<div><b>'+f2(m.comm)+' m²</b><span>Surface commerciale vendable (habitable + balcons)</span></div></div></div>';
+   +'<div><b>'+f2(m.comm)+' m²</b><span>Surface commerciale vendable (habitable + balcons − cage d\'escalier)</span></div></div></div>';
   h+='<div>'+barRow("Répartition du sol",[["s4",m.rdc,"Habitable RDC"],["s3",g.murs,"Murs"],["s5",g.cour,"Cour"]],S.S,"Habitable RDC "+f2(m.rdc)+" m², murs "+f2(g.murs)+" m², cour "+f2(g.cour)+" m²")
    +'<p class="bar-note">Habitable RDC '+f2(m.rdc)+' m², murs '+f2(g.murs)+' m², cour '+f2(g.cour)+' m².</p></div>';
-  h+='<div class="tw"><table><thead><tr><th>Niveau</th><th>Base</th><th>Encorbellement</th><th>Surface habitable</th></tr></thead><tbody>'
-   +'<tr><td>RDC</td><td>'+f2(S.S)+' − '+f2(g.cour)+' − '+f2(g.murs)+'</td><td>0</td><td>'+f2(m.rdc)+' m²</td></tr>'
-   +m.hab.slice(1).map(function(x,i){return '<tr><td>'+lvl(i+1)+'</td><td>'+f2(m.rdc)+'</td><td>+ '+f2(g.enc)+'</td><td>'+f2(x)+' m²</td></tr>';}).join("")
-   +'<tr class="sum"><td>Total</td><td></td><td></td><td>'+f2(m.comm)+' m²</td></tr></tbody></table></div>';
-  var rows=[["cour","Cour intérieure (aération)"],["murs","Emprise des murs"],["enc","Encorbellement par étage (balcons vendus)"],["esc","Escalier : marbre et cadres, par niveau"],["ter","Terrasse : supplément sur la surface d'étage (cage d'escalier, acrotère)"]];
+  h+='<div class="tw"><table><thead><tr><th>Niveau</th><th>Base</th><th>Encorbellement</th><th>Surface habitable</th><th>Cage d\'escalier</th><th>Surface vendable</th></tr></thead><tbody>'
+   +'<tr><td>RDC</td><td>'+f2(S.S)+' − '+f2(g.cour)+' − '+f2(g.murs)+'</td><td>0</td><td>'+f2(m.rdc)+' m²</td><td>− '+f2(g.cage)+'</td><td>'+f2(m.rdc-g.cage)+' m²</td></tr>'
+   +m.hab.slice(1).map(function(x,i){return '<tr><td>'+lvl(i+1)+'</td><td>'+f2(m.rdc)+'</td><td>+ '+f2(g.enc)+'</td><td>'+f2(x)+' m²</td><td>− '+f2(g.cage)+'</td><td>'+f2(x-g.cage)+' m²</td></tr>';}).join("")
+   +'<tr class="sum"><td>Total</td><td></td><td></td><td></td><td></td><td>'+f2(m.comm)+' m²</td></tr></tbody></table></div>';
+  var rows=[["cour","Cour intérieure (aération)"],["murs","Emprise des murs"],["enc","Encorbellement par étage (balcons vendus)"],["cage","Cage d'escalier au sol, par niveau (déduite de la surface vendable)"],["esc","Escalier : marbre et cadres, par niveau"],["ter","Terrasse : supplément sur la surface d'étage (cage d'escalier, acrotère)"]];
   var ms=[1,2,3].map(function(x){return compute(S,x);});
   h+='<div><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px"><h2 style="margin:0">Métrés par élément</h2><div style="display:flex;gap:8px;flex-wrap:wrap">'
    +'<button type="button" class="btn'+(S.edit?' primary':'')+'" data-act="edit" aria-pressed="'+(!!S.edit)+'">'+(S.edit?'Modification activée':'Modifier les métrés')+'</button>'
@@ -432,7 +432,7 @@ function paneSurf(m){
    +'<tr><td class="lbl">Surface de terrasse</td>'+ms.map(function(x){return '<td>'+f2(x.terr)+' m²</td>';}).join("")+'</tr>'
    +'<tr class="sum"><td>Surface commerciale vendable</td>'+ms.map(function(x){return '<td>'+f2(x.comm)+' m²</td>';}).join("")+'</tr>'
    +'</tbody></table></div>'
-   +'<p class="hint" style="margin-top:8px">La surface habitable du RDC est le terrain moins la cour et les murs. Chaque étage ajoute l\'encorbellement. La cage d\'escalier n\'est pas déduite de la surface habitable. Le marbre d\'escalier est chiffré dans le second œuvre.</p></div></section>';
+   +'<p class="hint" style="margin-top:8px">La surface habitable du RDC est le terrain moins la cour et les murs. Chaque étage ajoute l\'encorbellement. La cage d\'escalier est déduite de la surface vendable, niveau par niveau. Elle reste comptée dans la surface construite (main-d\'œuvre, plâtre). Le marbre d\'escalier est chiffré dans le second œuvre.</p></div></section>';
   return h;
 }
 
@@ -496,7 +496,7 @@ function paneAnnex(m){
   var E=[
    ["Surfaces","Surface habitable du RDC","Surface du terrain − cour intérieure − emprise des murs.",f2(A)+" − "+f2(g.cour)+" − "+f2(g.murs)+" = "+f2(m.rdc)+" m²","Cour et murs : voir « Métrés du lot »."],
    ["Surfaces","Surface habitable d'un étage","Surface habitable du RDC + encorbellement.",f2(m.rdc)+" + "+f2(g.enc)+" = "+f2(m.et)+" m²","L'encorbellement est le balcon sur voie publique, gagné à chaque étage."],
-   ["Surfaces","Surface commerciale vendable","Surface habitable du RDC + (nombre d'étages × surface habitable d'un étage). Équivaut à habitable + balcons.",f2(m.rdc)+" + "+S.nEt+" × "+f2(m.et)+" = "+f2(m.comm)+" m²","La cage d'escalier n'est pas déduite. C'est la base du chiffre d'affaires et de la marge au m²."],
+   ["Surfaces","Surface commerciale vendable","Somme, pour chaque niveau, de la surface habitable − la cage d'escalier. Équivaut à habitable + balcons, hors escalier.","("+f2(m.rdc)+" + "+S.nEt+" × "+f2(m.et)+") − "+nl+" × "+f2(g.cage)+" = "+f2(m.comm)+" m²","Cage d'escalier réglée à "+f2(g.cage)+" m² par niveau. À 0 m², l'escalier reste dans la surface vendable. Base du chiffre d'affaires et de la marge au m²."],
    ["Surfaces","Emprise de fondation","Surface du terrain − cour intérieure.",f2(A)+" − "+f2(g.cour)+" = "+f2(m.emprise)+" m²","Sert au calcul de la main-d'œuvre de fondation."],
    ["Surfaces","Surface de terrasse","Surface habitable d'un étage + supplément terrasse (cage d'escalier, acrotère).",f2(m.terr-g.ter)+" + "+f2(g.ter)+" = "+f2(m.terr)+" m²","Sert à la main-d'œuvre de terrasse et au carrelage de terrasse."],
    ["Surfaces","Facteur d'échelle des quantités","Surface du terrain ÷ 100. Appliqué aux quantités de matériaux et aux forfaits de finitions de la fiche, établis pour 100 m².",S.scale?f2(A)+" ÷ 100 = "+f2(m.k):"Option désactivée : facteur = 1","Réglable dans « Réglages avancés ». Camions arrondis à l'entier supérieur."],

@@ -177,7 +177,7 @@ tr.hl td,tr.hl th{background:var(--accent-soft)}
 "use strict";
 var KEY="maroc-btp-immo-v1";
 var DEF={
-  cfg:1,nEt:2,S:100,pT:3500,sol:"dur",pv:7000,scen:"haut",scale:true,imp:0,argPct:50,tab:"rent",
+  cfg:1,nEt:2,nApt:1,S:100,pT:3500,sol:"dur",pv:7000,scen:"haut",scale:true,imp:0,argPct:50,tab:"rent",
   edit:false,
   geo:{1:{cour:10,murs:10,enc:10,cage:0,esc:22,ter:20},2:{cour:0,murs:10,enc:5.6,cage:0,esc:22,ter:20},3:{cour:0,murs:10,enc:8,cage:0,esc:22,ter:20}},
   fees:{dgi:4,anc:1.5,ancFix:150,ancCert:100,not:1,notMin:2500,tva:20,deb:2000,archi:3.5,bet:12000,taxe:7000,racc:15000},
@@ -263,12 +263,12 @@ function compute(st,cfg){
     add("so",m,s+"marb","Marbre (escalier et cadres)","m²",g.esc,500);
     add("so",m,s+"pint","Peinture intérieure (MO + fournitures)","forfait",k,8000);
     add("so",m,s+"alu","Menuiserie aluminium (fenêtres, rideaux)","forfait",1,(j?14000:10500));
-    add("so",m,s+"bois","Portes en bois","porte",(j?5:4),2000);
-    if(j===0)add("so",m,"s0_blind","Porte blindée","pièce",1,4000);
+    add("so",m,s+"bois","Portes en bois","porte",(j?5:4)*st.nApt,2000);
+    if(j===0)add("so",m,"s0_blind","Porte blindée (entrée d'appartement)","pièce",st.nApt,4000);
     add("so",m,s+"ferro","Grilles et inox d'escalier","forfait",1,6000);
-    add("so",m,s+"sani","Sanitaires (salle de bain et WC)","forfait",1,4000);
-    add("so",m,s+"plac","Placard intégré","appartement",1,7000);
-    add("so",m,s+"cuis","Cuisine équipée (gamme supérieure)","appartement",1,20000);
+    add("so",m,s+"sani","Sanitaires (salle de bain et WC)","appartement",st.nApt,4000);
+    add("so",m,s+"plac","Placard intégré","appartement",st.nApt,7000);
+    add("so",m,s+"cuis","Cuisine équipée (gamme supérieure)","appartement",st.nApt,20000);
   }
   add("so","Terrasse et façades","st_carr","Carrelage terrasse","m²",terr,150);
   add("so","Terrasse et façades","st_porte","Porte de terrasse","pièce",1,2500);
@@ -319,6 +319,8 @@ function renderAside(){
    +'<button type="button" class="btn'+(S.edit?' primary':'')+'" data-act="edit" aria-pressed="'+(!!S.edit)+'">'+(S.edit?'Modification activée':'Modifier les métrés')+'</button></fieldset>';
   h+='<fieldset><legend>Nombre d\'étages (hors RDC)</legend>'+seg("net",S.nEt,[[0,"0"],[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"]])
     +'<p class="hint">Construction en R+'+S.nEt+', soit '+(S.nEt+1)+' niveau'+(S.nEt?'x':'')+' habitable'+(S.nEt?'s':'')+'.</p></fieldset>';
+  h+='<fieldset><legend>Appartements par étage</legend>'+seg("napt",S.nApt,[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"],[6,"6"]])
+    +'<p class="hint">Total : <b>'+((S.nEt+1)*S.nApt)+'</b> appartement'+((S.nEt+1)*S.nApt>1?'s':'')+'. Portes, porte blindée, sanitaires, placards et cuisines sont multipliés. Les surfaces ne changent pas.</p></fieldset>';
   h+='<fieldset><legend>Terrain</legend>'+field("i_S","Surface au sol","S",S.S,"m²")+field("i_pT","Prix du terrain","pT",S.pT,"DH/m²");
   h+='<p class="hint">Prix d\'achat : <b>'+dh(S.S*S.pT)+'</b></p>';
   h+='<span class="lab">Nature du sol</span>'+seg("sol",S.sol,[["dur","Sol dur"],["argile","Argileux"]])+'</fieldset>';
@@ -340,7 +342,7 @@ function renderVerdict(m){
   return '<section class="verdict" aria-label="Résultat"><div>'
    +'<p class="vlabel">'+(pos?"Gain potentiel":"Perte estimée")+'</p>'
    +'<p class="vnum '+(pos?"pos":"neg")+'">'+(pos?"+":"−")+" "+f0(Math.abs(m.marge))+'<small>DH</small></p>'
-   +'<p class="vsub">'+f2(m.comm)+' m² vendables à '+f0(S.pv)+' DH/m², lot de '+f0(S.S)+' m² à '+S.cfg+' façade'+(S.cfg>1?'s':'')+', en R+'+S.nEt+'.</p></div>'
+   +'<p class="vsub">'+f2(m.comm)+' m² vendables à '+f0(S.pv)+' DH/m², lot de '+f0(S.S)+' m² à '+S.cfg+' façade'+(S.cfg>1?'s':'')+', en R+'+S.nEt+', '+S.nApt+' appartement'+(S.nApt>1?'s':'')+' par niveau.</p></div>'
    +'<dl class="kpi">'
    +'<div><dt>Rentabilité (ROI)</dt><dd>'+f1(m.roi)+' %</dd></div>'
    +'<div><dt>Marge au m²</dt><dd>'+f0(m.mm2)+' DH</dd></div>'
@@ -513,8 +515,8 @@ function paneAnnex(m){
    ["Second œuvre","Carrelage et zellige","130 m² par niveau × facteur d'échelle × 150 DH/m². Terrasse : surface de terrasse × 150 DH/m².","RDC : "+L("s0_carr")+" ; terrasse : "+L("st_carr"),"150 DH/m² = 40 DH de main-d'œuvre + 110 DH de fournitures."],
    ["Second œuvre","Marbre d'escalier et cadres","Quantité de marbre par niveau × 500 DH/m².","RDC : "+L("s0_marb"),"C'est une quantité de marbre à acheter, pas l'emprise de l'escalier."],
    ["Second œuvre","Peintures","Intérieur : 8 000 DH par niveau (4 000 de main-d'œuvre + 4 000 de fournitures). Extérieur (Grifi) : 8 000 DH pour façades et terrasse. Multipliés par le facteur d'échelle.","Intérieur RDC : "+L("s0_pint")+" ; extérieur : "+L("sf_pext"),""],
-   ["Second œuvre","Menuiseries et ferronnerie","Aluminium : 10 500 DH (RDC) ou 14 000 DH par étage. Portes en bois : 2 000 DH pièce, 4 (RDC) ou 5 par étage. Porte blindée 4 000 DH. Grilles et inox : 6 000 DH par niveau. Porte de terrasse : 2 500 DH.","Aluminium RDC : "+L("s0_alu"),""],
-   ["Second œuvre","Sanitaires, placards, cuisines","Sanitaires : 4 000 DH par niveau. Placard : 7 000 DH par appartement. Cuisine équipée : 20 000 DH par appartement. Un appartement par niveau.","Cuisines : "+nl+" × 20 000 = "+dh(nl*20000),""],
+   ["Second œuvre","Menuiseries et ferronnerie","Aluminium : 10 500 DH (RDC) ou 14 000 DH par étage. Portes en bois : 2 000 DH pièce, 4 (RDC) ou 5 par étage. Porte blindée 4 000 DH. Grilles et inox : 6 000 DH par niveau. Porte de terrasse : 2 500 DH.","Aluminium RDC : "+L("s0_alu"),"Portes en bois et porte blindée multipliées par le nombre d'appartements par étage ("+S.nApt+"). Aluminium et ferronnerie ne changent pas."],
+   ["Second œuvre","Sanitaires, placards, cuisines","Sanitaires : 4 000 DH par appartement. Placard : 7 000 DH par appartement. Cuisine équipée : 20 000 DH par appartement. Nombre d'appartements = appartements par étage × nombre de niveaux.","Cuisines : "+nl+" niveaux × "+S.nApt+" appartement(s) × 20 000 = "+dh(nl*S.nApt*20000),"Appartements au total : "+(nl*S.nApt)+"."],
    ["Second œuvre","Total second œuvre","Somme de toutes les lignes du second œuvre.",dh(m.so),""],
    ["Terrain et frais","Prix d'achat du terrain","Surface du terrain × prix au m².",f2(A)+" × "+f0(S.pT)+" = "+dh(pT),""],
    ["Terrain et frais","Droits d'enregistrement DGI","Taux × prix d'achat.",f2(F.dgi)+" % × "+dh(pT)+" = "+dh(m.dgi),""],
@@ -617,6 +619,7 @@ document.addEventListener("click",function(e){
   if(a==="cfg")S.cfg=+v;
   else if(a==="sol")S.sol=v;
   else if(a==="net")S.nEt=+v;
+  else if(a==="napt")S.nApt=+v;
   else if(a==="edit")S.edit=!S.edit;
   else if(a==="geoReset")S.geo=clone(DEF.geo);
   else if(a==="scen"){S.scen=v;}
